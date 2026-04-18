@@ -2,10 +2,10 @@
 
 ## 1. Team Information
 
-* Name: karthik r nayak
+* Name: KARTHIK R NAYAK
 * SRN: PES2UG24CS217
-NAME:KOUSHIK
-SRN :PES2UG24CS232
+* Name: KOUSHIK C
+* SRN: PES2UG24CS232
 
 
 ---
@@ -201,7 +201,102 @@ sudo ./engine start c2 ./rootfs-alpha /cpu_hog --nice 10
 
 ---
 
-## 10. Design Decisions
+## 10. Engineering Analysis
+
+### 1. Isolation Mechanisms
+
+Containers use Linux namespaces:
+
+* **PID namespace** → isolates process IDs so containers have their own process tree
+* **UTS namespace** → allows each container to have its own hostname
+* **Mount namespace** → provides isolated filesystem view
+
+`chroot` is used to restrict filesystem access to the container rootfs.
+
+However, all containers still share:
+
+* the same kernel
+* the same physical memory
+* the same scheduler
+
+---
+
+### 2. Supervisor and Process Lifecycle
+
+A long-running supervisor process:
+
+* spawns containers using `clone()`
+* tracks metadata (PID, state, limits)
+* handles `SIGCHLD` to avoid zombie processes
+* performs cleanup and state transitions
+
+This ensures centralized lifecycle control.
+
+---
+
+### 3. IPC and Communication
+
+Communication between CLI and supervisor is implemented using:
+
+* **UNIX domain sockets** (control plane)
+
+Logging path uses:
+
+* **pipes** from container → supervisor
+
+This separation ensures control and data paths do not interfere.
+
+---
+
+### 4. Logging System Design
+
+Logging uses a **producer-consumer model**:
+
+* Producer threads read from container pipes
+* Consumer thread writes logs to files
+
+Synchronization is handled using:
+
+* mutexes → protect shared buffer
+* condition variables → manage full/empty buffer
+
+This prevents:
+
+* race conditions
+* blocking I/O
+* log loss
+
+---
+
+### 5. Memory Management and Enforcement
+
+The kernel module monitors **RSS (Resident Set Size)**:
+
+* represents actual physical memory used
+* excludes swapped memory
+
+Two thresholds:
+
+* **Soft limit** → warning (logged via `printk`)
+* **Hard limit** → process is killed using `SIGKILL`
+
+Kernel-space enforcement is required because user-space cannot reliably control memory usage.
+
+---
+
+### 6. Scheduling Behavior
+
+Experiments demonstrate:
+
+* CPU-bound processes compete for CPU
+* `nice` values influence scheduling priority
+* I/O-bound processes remain responsive
+
+Linux scheduler dynamically balances fairness and responsiveness.
+
+---
+
+## 11. Design Decisions
 
 ### Namespace Isolation
 
@@ -270,15 +365,3 @@ sudo rmmod monitor
 ```
 
 ---
-
-## 14. Demo Checklist (for grading)
-
-* [ ] Supervisor running
-* [ ] Multiple containers running
-* [ ] `ps` shows correct state
-* [ ] Logs working
-* [ ] Soft limit warning visible
-* [ ] Hard limit kill works
-* [ ] Scheduling difference observed
-* [ ] Clean shutdown (no zombies)
-
