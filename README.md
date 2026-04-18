@@ -1,4 +1,4 @@
-# 🧠 Supervised Multi-Container Runtime with Kernel Memory Monitor
+# Supervised Multi-Container Runtime with Kernel Memory Monitor
 
 ## 1. Team Information
 
